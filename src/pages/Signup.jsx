@@ -61,7 +61,7 @@ export default function SignUp() {
               {!mediaLessthanmd && (
                 <Grid container style={{ flex: "6" }}>
                   <img
-                    src="/signup.png"
+                    src="/signup.svg"
                     alt=""
                     style={{
                       height: "90%",
