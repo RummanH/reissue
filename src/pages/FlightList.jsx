@@ -1,17 +1,8 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { allAirports, flightListRes, reissue } from "../assets/flightList";
+import "./flightList.css";
 
-const FlightList = ({
-  reissueResponse,
-  airportList,
-  searchCity,
-  changeDeparture,
-  changeDestination,
-  toggleDestination,
-  toggleDropDown,
-  searchFlight,
-}) => {
-  const [showOriginDropdown, setShowOriginDropdown] = useState(false);
-  const [showDestinationDropdown, setShowDestinationDropdown] = useState(false);
+const FlightListComponent = () => {
   const [searchIsGoingOn, setSearchIsGoingOn] = useState(false);
   const [loaderObject, setLoaderObject] = useState({});
   const [isSearchExpired, setIsSearchExpired] = useState(false);
@@ -19,9 +10,616 @@ const FlightList = ({
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [isLoginExpired, setIsLoginExpired] = useState(false);
   const [loginSessionSecond, setLoginSessionSecond] = useState(0);
+  const [showSkeletonLoading, setShowSkeletonLoading] = useState(0);
+  const [reissueResponse, setReissueResponse] = useState(reissue);
+  const [isFilterClicked, setIsFilterClicked] = useState(false);
+  const [initialFlightList, setInitialFlightList] = useState([]);
+  const [shownFlightList, setShownFlightList] = useState(flightListRes);
+  const [flightState, setFlightStats] = useState({});
+  const [filterActive, setFilterActive] = useState("cheapest");
+  const [showOriginDropdown, setShowOriginDropdown] = useState(false);
+  const [showDestinationDropdown, setShowDestinationDropdown] = useState(false);
+  const [yesterday, setYesterday] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [imgUrl, setImgUrl] = useState("");
+  const [detailsVisibility, setDetailsVisibility] = useState({});
+  const [flightList, setFlightList] = useState(flightListRes);
+  const [journeyTypeModify, setJourneyTypeModify] = useState(1);
+  const [APICurrencyType, setAPICurrencyType] = useState("");
+  const [checkStatusArray, setCheckStatusArray] = useState([]);
+  const skeletonArray = Array.from({ length: 6 }, () => 0);
+  const [airportList, setAirportList] = useState(allAirports)
+  const [filterParams, setFilterParams] = useState({
+    aircraft: [],
+    baggage: [],
+    onward_flight_stops: [],
+    return_flight_stops: [],
+    onward_depart_time: [],
+    return_depart_time: [],
+    onward_arrival_time: [],
+    return_arrival_time: [],
+    onward_transit_hour: [],
+    return_transit_hour: [],
+    onward_flying_time: [],
+    return_flying_time: [],
+    onward_layover_airport: [],
+    return_layover_airport: [],
+    onward_destination_airport: [],
+    return_destination_airport: [],
+    priceMin: 0,
+    priceMax: 0,
+  });
 
-  const focusDropdown = (id) => {
-    document.getElementById(id).focus();
+  const [modifyFilterParams, setModifyFilterParams] = useState({
+    aircraft: [],
+    baggage: [],
+    onward_flight_stops: [],
+    return_flight_stops: [],
+    onward_depart_time: [],
+    return_depart_time: [],
+    onward_arrival_time: [],
+    return_arrival_time: [],
+    onward_transit_hour: [],
+    return_transit_hour: [],
+    onward_flying_time: [],
+    return_flying_time: [],
+    onward_layover_airport: [],
+    return_layover_airport: [],
+    onward_destination_airport: [],
+    return_destination_airport: [],
+    priceMin: 0,
+    priceMax: 0,
+  });
+
+  const searchFlight = () => {
+
+  };
+  
+  const changeDestination = (destination, reissueResponse, toastr) => {
+    const { AirSearchReq } = reissueResponse;
+    const showDestinationDropdown = false;
+  
+    // if (destination.AirportCode === AirSearchReq.Origin) {
+    //   toastr.error('Departure and destination cannot be the same!');
+    //   return { showDestinationDropdown, airportList };
+    // }
+
+
+    AirSearchReq.Destination = destination.AirportCode;
+    AirSearchReq.DestinationAirport = destination.SearchString;
+  
+    return { showDestinationDropdown, airportList };
+  };
+  
+
+
+  const changeDeparture = (origin, reissueResponse, toastr) => {
+    const { AirSearchReq } = reissueResponse;
+    const showOriginDropdown = false;
+    const airportList = [];
+  
+    if (origin.AirportCode === AirSearchReq.Destination) {
+      return toastr.error('Departure and destination cannot be the same!');
+    }
+  
+    AirSearchReq.Origin = origin.AirportCode;
+    AirSearchReq.OriginAirport = origin.SearchString;
+  
+    return { showOriginDropdown, airportList };
+  };
+  
+
+  const changeStatusArray = (index) => {
+    setCheckStatusArray((prevArray) => {
+      const newArray = [...prevArray];
+      newArray[index] = !newArray[index];
+      return newArray;
+    });
+  };
+
+  const toggleDestination = () => {
+    const { AirSearchReq } = reissueResponse;
+
+    const tempDestination = {
+      Destination: AirSearchReq.Destination,
+      DestinationAirport: AirSearchReq.DestinationAirport,
+      Origin: AirSearchReq.Origin,
+      OriginAirport: AirSearchReq.OriginAirport,
+    };
+
+    setReissueResponse((prevState) => ({
+      ...prevState,
+      AirSearchReq: {
+        ...prevState.AirSearchReq,
+        Destination: tempDestination.Origin,
+        DestinationAirport: tempDestination.OriginAirport,
+        Origin: tempDestination.Destination,
+        OriginAirport: tempDestination.DestinationAirport,
+      },
+    }));
+  };
+
+  const sortFlightList = (sortBy) => {
+    setFilterActive(sortBy);
+
+    if (sortBy === "directFlight") {
+      const directFlights = flightList.filter((flight) => flight.TotalTravelTimes.every((time) => time.NoOfStop === 0));
+      const newFive = directFlights.slice(0, 5);
+      return setShownFlightList(newFive);
+    }
+
+    const compareFunctions = {
+      earliest: compareDepartureTime,
+      cheapest: compareTotalPrice,
+      fastest: compareTotalDuration,
+      shortTransit: compareShortTransit,
+    };
+
+    const sortedList = [...flightList].sort(compareFunctions[sortBy]);
+    const newFive = sortedList.slice(0, 5);
+    setFlightList(sortedList);
+    setShownFlightList(newFive);
+  };
+
+  const newOnFilterChange = (event, value, currentFilter) => {
+    const isChecked = event.target.checked;
+    const filterArray = [...modifyFilterParams[currentFilter]];
+
+    if (isChecked) {
+      if (!filterArray.includes(value)) {
+        filterArray.push(value);
+      }
+    } else {
+      const index = filterArray.indexOf(value);
+      if (index !== -1) {
+        filterArray.splice(index, 1);
+      }
+    }
+
+    setModifyFilterParams((prevParams) => ({...prevParams, [currentFilter]: filterArray}));
+    flightListFilter();
+  };
+
+  const scrollTopFlightList = () => {
+    const listWrapper = document.querySelector(".list-wrapper-3");
+    if (listWrapper) {
+      const top = Math.floor(Math.abs(listWrapper.getBoundingClientRect().top));
+
+      if (top > 0) {
+        const scrollPosition = listWrapper.getBoundingClientRect().top + window.scrollY - 200;
+        window.scrollTo({ top: scrollPosition, behavior: "smooth" });
+      }
+    }
+  };
+
+  const emptyAnyArray = (filterParams) => {
+    for (const key in filterParams) {
+      if (Array.isArray(filterParams[key])) filterParams[key].length = 0
+    }
+  };
+
+  const resetAllFilter = () => {
+    // checkboxElements.current.forEach(checkbox => {
+    //   checkbox.checked = false;
+    // });
+
+    scrollTopFlightList();
+    emptyAnyArray(modifyFilterParams);
+    setIsFilterClicked(false);
+    setShownFlightList([]);
+    setShowSkeletonLoading(true);
+
+    setTimeout(() => {
+      flightListFilter();
+      setShowSkeletonLoading(false);
+    }, 700);
+  };
+
+  const millisecondsToHour = (value) => {
+    const milliSeconds = parseInt(value, 10);
+    return Math.floor(milliSeconds / 3600 / 1000);
+  };
+
+  const searchCity = (value) => {
+    setSearchQuery(value);
+  };
+
+  const getTimeRange = (timeString) => {
+    const ranges = {
+      "00:00 To 05:59": { startTime: 0, endTime: 5 },
+      "06:00 To 11:59": { startTime: 6, endTime: 11 },
+      "12:00 To 17:59": { startTime: 12, endTime: 17 },
+      "18:00 To 23:59": { startTime: 18, endTime: 23 },
+      "0 To 6 Hour": { startTime: 0, endTime: 5 },
+      "6 To 12 Hour": { startTime: 6, endTime: 11 },
+      "12 To 18 Hour": { startTime: 12, endTime: 17 },
+      "18 Hour +": { startTime: 18, endTime: 100 },
+    };
+
+    const defaultRange = { startTime: 0, endTime: 23 };
+    const selectedRange = ranges[timeString];
+    return selectedRange || defaultRange;
+  };
+
+  const toggleDetailsView = (index) => {
+    setDetailsVisibility((prevVisibility) => ({...prevVisibility, [index]: !prevVisibility[index]}));
+  };
+
+  const flightListFilter = () => {
+    let tempList = initialFlightList;
+
+    // Price Range FILTER
+    if (modifyFilterParams.priceMin > 0 && modifyFilterParams.priceMax > 0) {
+      tempList = tempList.filter((currentFlight) => {
+        return (+modifyFilterParams.priceMin <= +currentFlight.TotalPrice && +modifyFilterParams.priceMax >= +currentFlight.TotalPrice);
+      });
+    }
+
+    // AIRCRAFT FILTER
+    if (modifyFilterParams.aircraft.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.aircraft.some((aircraft) => {
+          if (reissueResponse.AirSearchReq.JourneyType === 1) {
+            return currentFlight.Onwards.some((item) => aircraft === item.Equipment);
+          } else if (reissueResponse.AirSearchReq.JourneyType === 2) {
+            return currentFlight.Onwards.some((item) => aircraft === item.Equipment || currentFlight.Returns.some((item) => aircraft === item.Equipment));
+          }
+        });
+      });
+    }
+
+    // BAGGAGE FILTER
+    if (modifyFilterParams.baggage.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.baggage.some((baggage) => {
+          if (reissueResponse.AirSearchReq.JourneyType === 2) {
+            return (baggage === currentFlight.Onwards.flat()[0].AirBaggageAllowance || baggage === currentFlight.Returns.flat()[0].AirBaggageAllowance);
+          } else {
+            return (baggage === currentFlight.Onwards.flat()[0].AirBaggageAllowance);
+          }
+        });
+      });
+    }
+
+    // ONWARD FLIGHT STOPS FILTER
+    if (modifyFilterParams.onward_flight_stops.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_flight_stops.some((onwardStop) => {
+          return onwardStop === currentFlight.TotalTravelTimes[0].NoOfStop;
+        });
+      });
+    }
+
+    // RETURN FLIGHT STOPS FILTER
+    if (modifyFilterParams.return_flight_stops.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_flight_stops.some((returnStop) => {
+          return returnStop === currentFlight.TotalTravelTimes[1].NoOfStop;
+        });
+      });
+    }
+
+    // ONWARD DEPART TIME FILTER
+    if (modifyFilterParams.onward_depart_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_depart_time.some((onwardDepartTime) => {
+          const departTime = new Date(currentFlight.Onwards.flat()[0].DepartureTime).getHours();
+          const { startTime, endTime } = getTimeRange(onwardDepartTime);
+          return departTime >= startTime && departTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // RETURN DEPART TIME FILTER
+    if (modifyFilterParams.return_depart_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_depart_time.some((returnDepartTime) => {
+          const departTime = new Date(currentFlight.Returns.flat()[0].DepartureTime).getHours();
+          const { startTime, endTime } = getTimeRange(returnDepartTime);
+          return departTime >= startTime && departTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // ONWARD ARRIVAL TIME FILTER
+    if (modifyFilterParams.onward_arrival_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_arrival_time.some((onwardArrivalTime) => {
+          const departTime = new Date(currentFlight.Onwards.flat()[currentFlight.Onwards.flat().length - 1].ArrivalTime).getHours();
+          const { startTime, endTime } = getTimeRange(onwardArrivalTime);
+          return departTime >= startTime && departTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // RETURN ARRIVAL TIME FILTER
+    if (modifyFilterParams.return_arrival_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_arrival_time.some((returnArrivalTime) => {
+          const departTime = new Date(currentFlight.Returns.flat()[currentFlight.Returns.flat().length - 1].ArrivalTime).getHours();
+          const { startTime, endTime } = getTimeRange(returnArrivalTime);
+          return departTime >= startTime && departTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // ONWARD TRANSIT HOUR FILTER
+    if (modifyFilterParams.onward_transit_hour.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_transit_hour.some((onwardTransitHour) => {
+          const layoverTime = millisecondsToHour(currentFlight.TotalTravelTimes[0].TotalLayoverTime);
+          const { startTime, endTime } = getTimeRange(onwardTransitHour);
+          return layoverTime >= startTime && layoverTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // RETURN TRANSIT HOUR FILTER
+    if (modifyFilterParams.return_transit_hour.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_transit_hour.some((returnTransitHour) => {
+          const layoverTime = millisecondsToHour(currentFlight.TotalTravelTimes[1].TotalLayoverTime);
+          const { startTime, endTime } = getTimeRange(returnTransitHour);
+          return layoverTime >= startTime && layoverTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // ONWARD FLYING TIME FILTER
+    if (modifyFilterParams.onward_flying_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_flying_time.some((onwardFlyingTime) => {
+          const flyingTime = totalDurationConvert(currentFlight.TotalTravelTimes[0].TotalTravelDuration);
+          const { startTime, endTime } = getTimeRange(onwardFlyingTime);
+          return flyingTime >= startTime && flyingTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // RETURN FLYING TIME FILTER
+    if (modifyFilterParams.return_flying_time.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_flying_time.some((returnFlyingTime) => {
+          const flyingTime = totalDurationConvert(currentFlight.TotalTravelTimes[1].TotalTravelDuration);
+          const { startTime, endTime } = getTimeRange(returnFlyingTime);
+          return flyingTime >= startTime && flyingTime <= endTime;
+        }
+        );
+      });
+    }
+
+    // ONWARD LAYOVER AIRPORT FILTER
+    if (modifyFilterParams.onward_layover_airport.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_layover_airport.some((onwardLayoverAirport) => {
+          return currentFlight.Onwards.flat().some((onward, i) => {
+            if (i !== currentFlight.Onwards.flat().length - 1) {
+              return onward.DestinationAirPortName === onwardLayoverAirport;
+            }
+          });
+        }
+        );
+      });
+    }
+
+    // RETURN LAYOVER AIRPORT FILTER
+    if (modifyFilterParams.return_layover_airport.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_layover_airport.some((returnLayoverAirport) => {
+          return currentFlight.Returns.flat().some((returns, i) => {
+            if (i !== currentFlight.Returns.flat().length - 1) {
+              return returns.DestinationAirPortName === returnLayoverAirport;
+            }
+          });
+        }
+        );
+      });
+    }
+
+    // ONWARD DESTINATION AIRPORT FILTER
+    if (modifyFilterParams.onward_destination_airport.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.onward_destination_airport.some((onwardDestAirport) => {
+          return (onwardDestAirport === currentFlight.Onwards.flat()[currentFlight.Onwards.flat().length - 1]?.DestinationAirPortName);
+        }
+        );
+      });
+    }
+
+    // RETURN DESTINATION AIRPORT FILTER
+    if (modifyFilterParams.return_destination_airport.length) {
+      tempList = tempList.filter((currentFlight) => {
+        return modifyFilterParams.return_destination_airport.some((returnDestAirport) => {
+          return (returnDestAirport === currentFlight.Returns.flat()[currentFlight.Returns.flat().length - 1]?.DestinationAirPortName);
+        }
+        );
+      });
+    }
+
+    setFlightList(tempList);
+    setShownFlightList([]);
+    scrollTopFlightList();
+    getFilteredFlight(flightList);
+
+    checkOnLoadFlightList();
+    setIsFilterClicked(Object.values(modifyFilterParams).some((x) => x.length));
+  };
+
+  const goToAdmin = () => {
+    window.location.href = localStorage.getItem("redirectURL");
+  };
+
+  const compareDepartureTime = (flightA, flightB) => {
+    const a = reissueResponse.AirSearchReq.JourneyType === 3 ? flightA.Onwards[0][0].DepartureTime: flightA.Onwards[0].DepartureTime;
+    const b = reissueResponse.AirSearchReq.JourneyType === 3 ? flightB.Onwards[0][0].DepartureTime: flightB.Onwards[0].DepartureTime;
+    return +new Date(a).getTime() - +new Date(b).getTime();
+  };
+
+  const compareTotalDuration = (flightA, flightB) => {
+    return (totalDurationConvertToSeconds(flightA.TotalTravelTimes[0].TotalTravelDuration) - totalDurationConvertToSeconds(flightB.TotalTravelTimes[0].TotalTravelDuration));
+  };
+
+  const compareTotalPrice = (flightA, flightB) => {
+    return flightA.TotalPrice - flightB.TotalPrice;
+  };
+
+  const compareShortTransit = (flightA, flightB) => {
+    return (flightA.TotalTravelTimes.reduce((acc, curr) => acc + curr.TotalLayoverTime, 0) - flightB.TotalTravelTimes.reduce((acc, curr) => acc + curr.TotalLayoverTime, 0));
+  };
+
+  const resetFilter = (currentFilter) => { 
+    setModifyFilterParams((prevState) => ({...prevState, [currentFilter]: []}));
+
+    const updatedCheckboxes = document.querySelectorAll(`.${currentFilter}`);
+    updatedCheckboxes.forEach((checkbox) => { checkbox.checked = false});
+
+    flightListFilter();
+  };
+
+  const checkOnLoadFlightList = () => {
+    const compareFunctions = {
+      earliest: compareDepartureTime,
+      cheapest: compareTotalPrice,
+      fastest: compareTotalDuration,
+      shortTransit: compareShortTransit,
+    };
+
+    let sortedFlightList = makeDeepClone(flightList);
+
+    if (filterActive !== "directFlight") {
+      sortedFlightList.sort(compareFunctions[filterActive]);
+    }
+
+    let updatedShownFlightList = shownFlightList.filter((item) => sortedFlightList.some((x) => x.ReshopSegmentCode === item.ReshopSegmentCode))
+
+    if (updatedShownFlightList.length !== sortedFlightList.length) {
+      const newFlights = sortedFlightList.filter((flight) => !updatedShownFlightList.some((x) => x.ReshopSegmentCode === flight.ReshopSegmentCode)).slice(0, 5);
+      updatedShownFlightList = [...updatedShownFlightList, ...newFlights];
+
+      if (filterActive !== "directFlight") {
+        updatedShownFlightList.sort(compareFunctions[filterActive]);
+      }
+    }
+
+    setShownFlightList(updatedShownFlightList);
+  };
+
+  const oneWay = () => {
+    setJourneyTypeModify(1);
+  };
+
+  const roundTrip = () => {
+    setJourneyTypeModify(2);
+    returnDateChange();
+  };
+
+  const returnDateChange = () => {
+    const { AirSearchReq } = reissueResponse;
+    const departureDate = new Date(AirSearchReq.DepartureDate);
+    const returnDate = AirSearchReq.ReturnDate? new Date(AirSearchReq.ReturnDate) : null;
+
+    departureDate.setDate(departureDate.getDate() + 3);
+    const newReturnDate = departureDate.toISOString().split("T")[0];
+
+    if (!returnDate || departureDate > returnDate) {
+      setReissueResponse((prevState) => ({
+        ...prevState,
+        AirSearchReq: {
+          ...prevState.AirSearchReq,
+          ReturnDate: newReturnDate,
+        },
+      }));
+    }
+  };
+
+  const totalDurationConvertToSeconds = (time) => {
+    const arr = time.split(" ");
+    let seconds;
+
+    if (arr.length === 3) {
+      const day_arr = arr[0].split("d");
+      const hour_arr = arr[1].split("h");
+      const min_arr = arr[2].split("m");
+      seconds =
+        parseInt(day_arr[0]) * 24 * 3600 +
+        parseInt(hour_arr[0]) * 3600 +
+        parseInt(min_arr[0]) * 60;
+    } else if (arr.length === 2) {
+      const hour_arr = arr[0].split("h");
+      const min_arr = arr[1].split("m");
+      seconds = parseInt(hour_arr[0]) * 3600 + parseInt(min_arr[0]) * 60;
+    } else if (arr.length === 1) {
+      const min_arr = arr[0].split("m");
+      seconds = parseInt(min_arr[0]) * 60;
+    }
+
+    return seconds;
+  };
+
+  const makeDeepClone = (object) => {
+    return JSON.parse(JSON.stringify(object));
+  };
+
+  const getFilteredFlight = (tempFlightList = []) => {
+    if (tempFlightList.length) {
+      const earliestFlight = makeDeepClone(tempFlightList).sort(compareDepartureTime).shift();
+      const cheapestFlight = makeDeepClone(tempFlightList).sort(compareTotalPrice).shift();
+      const fastestFlight = makeDeepClone(tempFlightList).sort(compareTotalDuration).shift();
+
+      const earliest = earliestFlight ? { travelTimes: earliestFlight.TotalTravelTimes, totalPrice: earliestFlight.TotalPrice } : null;
+      const cheapest = cheapestFlight ? { travelTimes: cheapestFlight.TotalTravelTimes, totalPrice: cheapestFlight.TotalPrice } : null;
+      const fastest = fastestFlight ? { travelTimes: fastestFlight.TotalTravelTimes, totalPrice: fastestFlight.TotalPrice } : null;
+
+      setFlightStats({ earliest: earliest, cheapest: cheapest, fastest: fastest});
+    }
+  };
+
+  const totalDurationConvert = (time) => {
+    const arr = time.split(" ");
+    let seconds;
+
+    if (arr.length === 3) {
+      const day_arr = arr[0].split("d");
+      const hour_arr = arr[1].split("h");
+      const min_arr = arr[2].split("m");
+      seconds =
+        parseInt(day_arr[0]) * 24 * 3600 +
+        parseInt(hour_arr[0]) * 3600 +
+        parseInt(min_arr[0]) * 60;
+    } else if (arr.length === 2) {
+      const hour_arr = arr[0].split("h");
+      const min_arr = arr[1].split("m");
+      seconds = parseInt(hour_arr[0]) * 3600 + parseInt(min_arr[0]) * 60;
+    } else if (arr.length === 1) {
+      const min_arr = arr[0].split("m");
+      seconds = parseInt(min_arr[0]) * 60;
+    }
+
+    const hours = Math.floor(seconds / 60 / 60);
+    return hours;
+  };
+
+  const toggleDropDown = (dropdownNumber) => {
+    setTimeout(() => {
+      setShowOriginDropdown(dropdownNumber === 1);
+      setShowDestinationDropdown(dropdownNumber === 2);
+    });
+  };
+
+  const focusDropdown = (target) => {
+    setTimeout(() => {
+      const targetElement = document.querySelector(`.${target}`)
+      if (targetElement) {
+        targetElement.focus();
+      }
+    }, 0);
   };
 
   const toggleOriginDropdown = () => {
@@ -32,9 +630,9 @@ const FlightList = ({
     setShowDestinationDropdown(!showDestinationDropdown);
   };
 
-  if (reissueResponse) {
-    return null;
-  }
+  // if (reissueResponse) {
+  //   return null;
+  // }
 
   return (
     <>
@@ -87,9 +685,9 @@ const FlightList = ({
                   <h1 className="timer-in-expire">00:0{timerSeconds}</h1>
                 )}
                 <div className="session-btn">
-                  <button className="btn" onClick={searchAgain}>
+                  {/* <button className="btn" onClick={searchAgain}>
                     Search Again
-                  </button>
+                  </button> */}
                 </div>
               </div>
             </div>
@@ -523,9 +1121,7 @@ const FlightList = ({
           <div className="container">
             <div className="row">
               <div className="col-lg-3">
-                <div
-                  className={`left-sidebar ${isSticky ? "sticky-sidebar" : ""}`}
-                >
+                <div className="left-sidebar sticky-sidebar">
                   <div className="found-flight">
                     <span>{flightList.length} results found</span>
                     <button
@@ -578,14 +1174,14 @@ const FlightList = ({
                                 checkStatusArray[0] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.aircraft.length
-                                ? `${modify_filter_params.aircraft.length} Selected`
+                              {modifyFilterParams.aircraft.length
+                                ? `${modifyFilterParams.aircraft.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <button
                             className={`arrow-reset ${
-                              !modify_filter_params.aircraft.length
+                              !modifyFilterParams.aircraft.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -600,7 +1196,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.aircraft.map((data, index) => (
+                          {filterParams.aircraft.map((data, index) => (
                             <div className="accordion-body" key={index}>
                               <div className="form-check">
                                 <input
@@ -629,9 +1225,7 @@ const FlightList = ({
                     <div
                       className="card accordion-item mb-2"
                       style={{
-                        display: filter_params.baggage.length
-                          ? "block"
-                          : "none",
+                        display: filterParams.baggage.length ? "block" : "none",
                       }}
                     >
                       <h2 className="accordion-header d-flex align-items-center">
@@ -651,14 +1245,14 @@ const FlightList = ({
                                 checkStatusArray[1] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.baggage.length
-                                ? `${modify_filter_params.baggage.length} Selected`
+                              {modifyFilterParams.baggage.length
+                                ? `${modifyFilterParams.baggage.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.baggage.length
+                              !modifyFilterParams.baggage.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -670,7 +1264,7 @@ const FlightList = ({
                       </h2>
                       <div id="baggage" className="accordion-collapse collapse">
                         <div className="sidebar-body">
-                          {filter_params.baggage.map((data, index) => (
+                          {filterParams.baggage.map((data, index) => (
                             <div className="accordion-body" key={index}>
                               <div className="form-check">
                                 <input
@@ -713,14 +1307,14 @@ const FlightList = ({
                                 checkStatusArray[2] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_flight_stops.length
-                                ? `${modify_filter_params.onward_flight_stops.length} Selected`
+                              {modifyFilterParams.onward_flight_stops.length
+                                ? `${modifyFilterParams.onward_flight_stops.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_flight_stops.length
+                              !modifyFilterParams.onward_flight_stops.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -735,7 +1329,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_flight_stops.map(
+                          {filterParams.onward_flight_stops.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -785,14 +1379,14 @@ const FlightList = ({
                                   checkStatusArray[3] ? "invisible" : ""
                                 }`}
                               >
-                                {modify_filter_params.return_flight_stops.length
-                                  ? `${modify_filter_params.return_flight_stops.length} Selected`
+                                {modifyFilterParams.return_flight_stops.length
+                                  ? `${modifyFilterParams.return_flight_stops.length} Selected`
                                   : "Any"}
                               </small>
                             </div>
                             <span
                               className={`arrow-reset ${
-                                !modify_filter_params.return_flight_stops.length
+                                !modifyFilterParams.return_flight_stops.length
                                   ? "invisible"
                                   : ""
                               }`}
@@ -807,7 +1401,7 @@ const FlightList = ({
                           className="accordion-collapse collapse"
                         >
                           <div className="sidebar-body">
-                            {filter_params.return_flight_stops.map(
+                            {filterParams.return_flight_stops.map(
                               (data, index) => (
                                 <div className="accordion-body" key={index}>
                                   <div className="form-check">
@@ -857,14 +1451,14 @@ const FlightList = ({
                                 checkStatusArray[4] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_depart_time.length
-                                ? `${modify_filter_params.onward_depart_time.length} Selected`
+                              {modifyFilterParams.onward_depart_time.length
+                                ? `${modifyFilterParams.onward_depart_time.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_depart_time.length
+                              !modifyFilterParams.onward_depart_time.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -879,7 +1473,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_depart_time.map(
+                          {filterParams.onward_depart_time.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -929,14 +1523,14 @@ const FlightList = ({
                                   checkStatusArray[5] ? "invisible" : ""
                                 }`}
                               >
-                                {modify_filter_params.return_depart_time.length
-                                  ? `${modify_filter_params.return_depart_time.length} Selected`
+                                {modifyFilterParams.return_depart_time.length
+                                  ? `${modifyFilterParams.return_depart_time.length} Selected`
                                   : "Any"}
                               </small>
                             </div>
                             <span
                               className={`arrow-reset ${
-                                !modify_filter_params.return_depart_time.length
+                                !modifyFilterParams.return_depart_time.length
                                   ? "invisible"
                                   : ""
                               }`}
@@ -951,7 +1545,7 @@ const FlightList = ({
                           className="accordion-collapse collapse"
                         >
                           <div className="sidebar-body">
-                            {filter_params.return_depart_time.map(
+                            {filterParams.return_depart_time.map(
                               (data, index) => (
                                 <div className="accordion-body" key={index}>
                                   <div className="form-check">
@@ -1001,14 +1595,14 @@ const FlightList = ({
                                 checkStatusArray[6] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_arrival_time.length
-                                ? `${modify_filter_params.onward_arrival_time.length} Selected`
+                              {modifyFilterParams.onward_arrival_time.length
+                                ? `${modifyFilterParams.onward_arrival_time.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_arrival_time.length
+                              !modifyFilterParams.onward_arrival_time.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1023,7 +1617,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_arrival_time.map(
+                          {filterParams.onward_arrival_time.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1073,14 +1667,14 @@ const FlightList = ({
                                   checkStatusArray[7] ? "invisible" : ""
                                 }`}
                               >
-                                {modify_filter_params.return_arrival_time.length
-                                  ? `${modify_filter_params.return_arrival_time.length} Selected`
+                                {modifyFilterParams.return_arrival_time.length
+                                  ? `${modifyFilterParams.return_arrival_time.length} Selected`
                                   : "Any"}
                               </small>
                             </div>
                             <span
                               className={`arrow-reset ${
-                                !modify_filter_params.return_arrival_time.length
+                                !modifyFilterParams.return_arrival_time.length
                                   ? "invisible"
                                   : ""
                               }`}
@@ -1095,7 +1689,7 @@ const FlightList = ({
                           className="accordion-collapse collapse"
                         >
                           <div className="sidebar-body">
-                            {filter_params.return_arrival_time.map(
+                            {filterParams.return_arrival_time.map(
                               (data, index) => (
                                 <div className="accordion-body" key={index}>
                                   <div className="form-check">
@@ -1128,7 +1722,7 @@ const FlightList = ({
                       </div>
                     )}
 
-                    {filter_params.onward_transit_hour.length > 0 && (
+                    {filterParams.onward_transit_hour.length > 0 && (
                       <div className="card accordion-item mb-2">
                         <h2 className="accordion-header d-flex align-items-center">
                           <button
@@ -1146,14 +1740,14 @@ const FlightList = ({
                                   checkStatusArray[8] ? "invisible" : ""
                                 }`}
                               >
-                                {modify_filter_params.onward_transit_hour.length
-                                  ? `${modify_filter_params.onward_transit_hour.length} Selected`
+                                {modifyFilterParams.onward_transit_hour.length
+                                  ? `${modifyFilterParams.onward_transit_hour.length} Selected`
                                   : "Any"}
                               </small>
                             </div>
                             <span
                               className={`arrow-reset ${
-                                !modify_filter_params.onward_transit_hour.length
+                                !modifyFilterParams.onward_transit_hour.length
                                   ? "invisible"
                                   : ""
                               }`}
@@ -1168,7 +1762,7 @@ const FlightList = ({
                           className="accordion-collapse collapse"
                         >
                           <div className="sidebar-body">
-                            {filter_params.onward_transit_hour.map(
+                            {filterParams.onward_transit_hour.map(
                               (data, index) => (
                                 <div className="accordion-body" key={index}>
                                   <div className="form-check">
@@ -1206,7 +1800,7 @@ const FlightList = ({
                       style={{
                         display:
                           reissueResponse?.AirSearchReq.JourneyType === 2 &&
-                          filter_params.return_transit_hour.length
+                          filterParams.return_transit_hour.length
                             ? "block"
                             : "none",
                       }}
@@ -1227,14 +1821,14 @@ const FlightList = ({
                                 checkStatusArray[9] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.return_transit_hour.length
-                                ? `${modify_filter_params.return_transit_hour.length} Selected`
+                              {modifyFilterParams.return_transit_hour.length
+                                ? `${modifyFilterParams.return_transit_hour.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.return_transit_hour.length
+                              !modifyFilterParams.return_transit_hour.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1249,7 +1843,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.return_transit_hour.map(
+                          {filterParams.return_transit_hour.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1298,14 +1892,14 @@ const FlightList = ({
                                 checkStatusArray[10] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_flying_time.length
-                                ? `${modify_filter_params.onward_flying_time.length} Selected`
+                              {modifyFilterParams.onward_flying_time.length
+                                ? `${modifyFilterParams.onward_flying_time.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_flying_time.length
+                              !modifyFilterParams.onward_flying_time.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1320,7 +1914,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_flying_time.map(
+                          {filterParams.onward_flying_time.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1377,14 +1971,14 @@ const FlightList = ({
                                 checkStatusArray[11] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.return_flying_time.length
-                                ? `${modify_filter_params.return_flying_time.length} Selected`
+                              {modifyFilterParams.return_flying_time.length
+                                ? `${modifyFilterParams.return_flying_time.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.return_flying_time.length
+                              !modifyFilterParams.return_flying_time.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1399,7 +1993,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.return_flying_time.map(
+                          {filterParams.return_flying_time.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1434,7 +2028,7 @@ const FlightList = ({
                     <div
                       className="card accordion-item mb-2"
                       style={{
-                        display: filter_params.onward_layover_airport.length
+                        display: filterParams.onward_layover_airport.length
                           ? "block"
                           : "none",
                       }}
@@ -1455,16 +2049,14 @@ const FlightList = ({
                                 checkStatusArray[12] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_layover_airport
-                                .length
-                                ? `${modify_filter_params.onward_layover_airport.length} Selected`
+                              {modifyFilterParams.onward_layover_airport.length
+                                ? `${modifyFilterParams.onward_layover_airport.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_layover_airport
-                                .length
+                              !modifyFilterParams.onward_layover_airport.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1481,7 +2073,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_layover_airport.map(
+                          {filterParams.onward_layover_airport.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1518,7 +2110,7 @@ const FlightList = ({
                       style={{
                         display:
                           reissueResponse?.AirSearchReq.JourneyType === 2 &&
-                          filter_params.return_layover_airport.length
+                          filterParams.return_layover_airport.length
                             ? "block"
                             : "none",
                       }}
@@ -1539,16 +2131,14 @@ const FlightList = ({
                                 checkStatusArray[13] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.return_layover_airport
-                                .length
-                                ? `${modify_filter_params.return_layover_airport.length} Selected`
+                              {modifyFilterParams.return_layover_airport.length
+                                ? `${modifyFilterParams.return_layover_airport.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.return_layover_airport
-                                .length
+                              !modifyFilterParams.return_layover_airport.length
                                 ? "invisible"
                                 : ""
                             }`}
@@ -1565,7 +2155,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.return_layover_airport.map(
+                          {filterParams.return_layover_airport.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1600,7 +2190,7 @@ const FlightList = ({
                     <div
                       className="card accordion-item mb-2"
                       style={{
-                        display: filter_params.onward_destination_airport.length
+                        display: filterParams.onward_destination_airport.length
                           ? "block"
                           : "none",
                       }}
@@ -1621,15 +2211,15 @@ const FlightList = ({
                                 checkStatusArray[14] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.onward_destination_airport
+                              {modifyFilterParams.onward_destination_airport
                                 .length
-                                ? `${modify_filter_params.onward_destination_airport.length} Selected`
+                                ? `${modifyFilterParams.onward_destination_airport.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.onward_destination_airport
+                              !modifyFilterParams.onward_destination_airport
                                 .length
                                 ? "invisible"
                                 : ""
@@ -1647,7 +2237,7 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.onward_destination_airport.map(
+                          {filterParams.onward_destination_airport.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
@@ -1684,7 +2274,7 @@ const FlightList = ({
                       style={{
                         display:
                           reissueResponse?.AirSearchReq.JourneyType === 2 &&
-                          filter_params.return_destination_airport.length
+                          filterParams.return_destination_airport.length
                             ? "block"
                             : "none",
                       }}
@@ -1705,15 +2295,15 @@ const FlightList = ({
                                 checkStatusArray[15] ? "invisible" : ""
                               }`}
                             >
-                              {modify_filter_params.return_destination_airport
+                              {modifyFilterParams.return_destination_airport
                                 .length
-                                ? `${modify_filter_params.return_destination_airport.length} Selected`
+                                ? `${modifyFilterParams.return_destination_airport.length} Selected`
                                 : "Any"}
                             </small>
                           </div>
                           <span
                             className={`arrow-reset ${
-                              !modify_filter_params.return_destination_airport
+                              !modifyFilterParams.return_destination_airport
                                 .length
                                 ? "invisible"
                                 : ""
@@ -1731,12 +2321,12 @@ const FlightList = ({
                         className="accordion-collapse collapse"
                       >
                         <div className="sidebar-body">
-                          {filter_params.return_destination_airport.map(
+                          {filterParams.return_destination_airport.map(
                             (data, index) => (
                               <div className="accordion-body" key={index}>
                                 <div className="form-check">
                                   <input
-                                    ref={filterCheckbox}
+                                    // ref={filterCheckbox}
                                     className="form-check-input return_destination_airport"
                                     type="checkbox"
                                     value=""
@@ -1779,13 +2369,13 @@ const FlightList = ({
                     >
                       <div className="choice">Earliest</div>
                       <div className="item-price">
-                        {APICurrencyType} {flightStats?.earliest.totalPrice}
+                        {/* {APICurrencyType} {flightStats?.earliest.totalPrice} */}
                       </div>
                       <div className="travel-duration">
-                        {
+                        {/* {
                           flightStats?.earliest.travelTimes[0]
                             .TotalTravelDuration
-                        }{" "}
+                        }{" "} */}
                         (Total Travel Time)
                       </div>
                     </div>
@@ -1799,13 +2389,13 @@ const FlightList = ({
                     >
                       <div className="choice">Cheapest</div>
                       <div className="item-price">
-                        {APICurrencyType} {flightStats?.cheapest.totalPrice}
+                        {/* {APICurrencyType} {flightStats?.cheapest.totalPrice} */}
                       </div>
                       <div className="travel-duration">
-                        {
+                        {/* {
                           flightStats?.cheapest.travelTimes[0]
                             .TotalTravelDuration
-                        }{" "}
+                        }{" "} */}
                         (Total Travel Time)
                       </div>
                     </div>
@@ -1817,622 +2407,407 @@ const FlightList = ({
                     >
                       <div className="choice">Fastest</div>
                       <div className="item-price">
-                        {APICurrencyType} {flightStats?.fastest.totalPrice}
+                        {/* {APICurrencyType} {flightStats?.fastest.totalPrice} */}
                       </div>
                       <div className="travel-duration">
-                        {
+                        {/* {
                           flightStats?.fastest.travelTimes[0]
                             .TotalTravelDuration
-                        }{" "}
+                        }{" "} */}
                         (Total Travel Time)
                       </div>
                     </div>
                   </div>
 
                   <div className="all-result list-wrapper-3">
-                    <div className="flight-item">
-                      <div className="single-flight">
-                        <div className="row align-items-center">
-                          <div className="col-lg-6">
-                            <div className="row">
-                              <div className="col-lg-3">
-                                <div className="airbus">
-                                  <img
-                                    src={`${imgUrl}${data.PlatingCarrier}.gif`}
-                                    alt=""
-                                  />
-                                  <div className="airbus-info">
-                                    <div className="name">
-                                      {data.PlatingCarrierName}
-                                    </div>
-                                    <div className="name">
-                                      <strong>
-                                        {`${data.Onwards[0].Origin} - ${
-                                          data.Onwards[data.Onwards.length - 1]
-                                            .Destination
-                                        }`}
-                                      </strong>
-                                    </div>
-                                    {data.TotalTravelTimes[0]
-                                      ?.TotalLayoverTime && (
-                                      <div className="flight-no">
-                                        {millisecondsToDayHourMin(
+                    {shownFlightList.map((data, i) => {
+                      return (
+                        <>
+                          <div className="flight-item">
+                            <div className="single-flight">
+                              <div className="row align-items-center">
+                                <div className="col-lg-6">
+                                  <div className="row">
+                                    <div className="col-lg-3">
+                                      <div className="airbus">
+                                        <img
+                                          src={`${imgUrl}${data.PlatingCarrier}.gif`}
+                                          alt=""
+                                        />
+                                        <div className="airbus-info">
+                                          <div className="name">
+                                            {data.PlatingCarrierName}
+                                          </div>
+                                          <div className="name">
+                                            <strong>
+                                              {`${data.Onwards[0].Origin} - ${
+                                                data.Onwards[
+                                                  data.Onwards.length - 1
+                                                ].Destination
+                                              }`}
+                                            </strong>
+                                          </div>
+                                          {data.TotalTravelTimes[0]
+                                            ?.TotalLayoverTime && (
+                                            <div className="flight-no">
+                                              {/* {millisecondsToDayHourMin(
                                           data.TotalTravelTimes[0]
                                             ?.TotalLayoverTime
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="col-4 col-lg-3">
-                                <div className="flight-infos depart">
-                                  <div className="flight-time">
-                                    {data.Onwards[0].DepartureTime.toLocaleString(
-                                      "en-US",
-                                      {
-                                        hour: "numeric",
-                                        minute: "numeric",
-                                        hour12: true,
-                                      }
-                                    )}
-                                  </div>
-                                  <div className="flight-month">
-                                    {data.Onwards[0].DepartureTime.toLocaleString(
-                                      "en-US",
-                                      {
-                                        month: "short",
-                                        day: "numeric",
-                                        weekday: "short",
-                                      }
-                                    )}
-                                  </div>
-                                  <div className="airport-name">
-                                    {`${data.Onwards[0].OriginAirPortName}, ${data.Onwards[0].OriginAirPortName}`}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="col-4 col-lg-3">
-                                <div className="time-stop">
-                                  <div className="total-time">
-                                    {
-                                      data.TotalTravelTimes[0]
-                                        ?.TotalTravelDuration
-                                    }
-                                  </div>
-                                  <div className="quick-view">
-                                    {[
-                                      ...Array(
-                                        data.TotalTravelTimes[0].NoOfStop
-                                      ),
-                                    ].map((_, stopIndex) => (
-                                      <span
-                                        key={stopIndex}
-                                        data-toggle="popover"
-                                        data-trigger="hover"
-                                      >
-                                        <strong>
-                                          {`${data.Onwards[stopIndex].OriginAirPortName} - ${data.Onwards[stopIndex].DestinationAirPortName}`}
-                                        </strong>
-                                        <p>
-                                          Travel Time:{" "}
-                                          {
-                                            data.Onwards[stopIndex]
-                                              .TravelDuration
-                                          }
-                                        </p>
-                                        <p>
-                                          Layover Time:{" "}
-                                          {data.Onwards[stopIndex].LayoverTime}
-                                        </p>
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <div className="total-stop">
-                                    {`${data.TotalTravelTimes[0]?.NoOfStop} ${
-                                      data.TotalTravelTimes[0]?.NoOfStop > 1
-                                        ? "Stops"
-                                        : "Stop"
-                                    }`}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="col-4 col-lg-3">
-                                <div className="flight-infos arrive">
-                                  <div className="flight-time">
-                                    {data.Onwards[
-                                      data.Onwards.length - 1
-                                    ].ArrivalTime.toLocaleString("en-US", {
-                                      hour: "numeric",
-                                      minute: "numeric",
-                                      hour12: true,
-                                    })}
-                                  </div>
-                                  <div className="flight-month">
-                                    {data.Onwards[
-                                      data.Onwards.length - 1
-                                    ].ArrivalTime.toLocaleString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      weekday: "short",
-                                    })}
-                                  </div>
-                                  <div className="airport-name">
-                                    {`${
-                                      data.Onwards[data.Onwards.length - 1]
-                                        .DestinationAirPortName
-                                    }, ${
-                                      data.Onwards[data.Onwards.length - 1]
-                                        .DestinationAirPortName
-                                    }`}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {reissueResponse.AirSearchReq.JourneyType === 2 && (
-                              <div className="row">
-                                <hr />
-                                <div className="col-lg-3">
-                                  <div className="airbus">
-                                    <img
-                                      src={`${imgUrl}${data.PlatingCarrier}.gif`}
-                                      alt=""
-                                    />
-                                    <div className="airbus-info">
-                                      <div className="name">
-                                        {data.PlatingCarrierName}
-                                      </div>
-                                      <div className="name">
-                                        <strong>
-                                          {`${data.Returns[0].Origin} - ${
-                                            data.Returns[
-                                              data.Returns.length - 1
-                                            ].Destination
-                                          }`}
-                                        </strong>
-                                      </div>
-                                      {data.TotalTravelTimes[1]
-                                        ?.TotalLayoverTime && (
-                                        <div className="flight-no">
-                                          {millisecondsToDayHourMin(
-                                            data.TotalTravelTimes[1]
-                                              ?.TotalLayoverTime
+                                        )} */}
+                                            </div>
                                           )}
                                         </div>
-                                      )}
+                                      </div>
                                     </div>
-                                  </div>
-                                </div>
-                                <div className="col-4 col-lg-3">
-                                  <div className="flight-infos depart">
-                                    <div className="flight-time">
-                                      {data.Returns[0].DepartureTime.toLocaleString(
-                                        "en-US",
-                                        {
-                                          hour: "numeric",
-                                          minute: "numeric",
-                                          hour12: true,
-                                        }
-                                      )}
-                                    </div>
-                                    <div className="flight-month">
-                                      {data.Returns[0].DepartureTime.toLocaleString(
-                                        "en-US",
-                                        {
-                                          month: "short",
-                                          day: "numeric",
-                                          weekday: "short",
-                                        }
-                                      )}
-                                    </div>
-                                    <div className="airport-name">
-                                      {`${data.Returns[0].OriginAirPortName}, ${data.Returns[0].OriginAirPortName}`}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-4 col-lg-3">
-                                  <div className="time-stop">
-                                    <div className="total-time">
-                                      {
-                                        data.TotalTravelTimes[1]
-                                          ?.TotalTravelDuration
-                                      }
-                                    </div>
-                                    <div className="quick-view">
-                                      {[
-                                        ...Array(
-                                          data.TotalTravelTimes[1].NoOfStop
-                                        ),
-                                      ].map((_, stopIndex) => (
-                                        <span
-                                          key={stopIndex}
-                                          data-toggle="popover"
-                                          data-trigger="hover"
-                                        >
-                                          <strong>
-                                            {`${data.Returns[stopIndex].OriginAirPortName} - ${data.Returns[stopIndex].DestinationAirPortName}`}
-                                          </strong>
-                                          <p>
-                                            Travel Time:{" "}
+                                    <div className="col-4 col-lg-3">
+                                      <div className="flight-infos depart">
+                                        <div className="flight-time">
+                                          {data.Onwards[0].DepartureTime.toLocaleString(
+                                            "en-US",
                                             {
-                                              data.Returns[stopIndex]
-                                                .TravelDuration
+                                              hour: "numeric",
+                                              minute: "numeric",
+                                              hour12: true,
                                             }
-                                          </p>
-                                          <p>
-                                            Layover Time:{" "}
-                                            {
-                                              data.Returns[stopIndex]
-                                                .LayoverTime
-                                            }
-                                          </p>
-                                        </span>
-                                      ))}
-                                    </div>
-                                    <div className="total-stop">
-                                      {`${data.TotalTravelTimes[1]?.NoOfStop} ${
-                                        data.TotalTravelTimes[1]?.NoOfStop > 1
-                                          ? "Stops"
-                                          : "Stop"
-                                      }`}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-4 col-lg-3">
-                                  <div className="flight-infos arrive">
-                                    <div className="flight-time">
-                                      {data.Returns[
-                                        data.Returns.length - 1
-                                      ].ArrivalTime.toLocaleString("en-US", {
-                                        hour: "numeric",
-                                        minute: "numeric",
-                                        hour12: true,
-                                      })}
-                                    </div>
-                                    <div className="flight-month">
-                                      {data.Returns[
-                                        data.Returns.length - 1
-                                      ].ArrivalTime.toLocaleString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        weekday: "short",
-                                      })}
-                                    </div>
-                                    <div className="airport-name">
-                                      {`${
-                                        data.Returns[data.Returns.length - 1]
-                                          .DestinationAirPortName
-                                      }, ${
-                                        data.Returns[data.Returns.length - 1]
-                                          .DestinationAirPortName
-                                      }`}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="col-lg-6">
-                            <div className="price-box-main">
-                              <div
-                                className="old-total-price price-box"
-                                style={{ background: "#fef5e7" }}
-                              >
-                                <div className="price-box-title">
-                                  Previous Total Fare
-                                </div>
-                                <div className="price-box-price">
-                                  {APICurrencyType} <br />{" "}
-                                  {reissueResponse?.BookingResponseJson.AirPriceCheckResponse.TotalPrice.toFixed(
-                                    2
-                                  )}
-                                </div>
-                              </div>
-                              <div
-                                className="new-total-price price-box"
-                                style={{ background: "#fdebd0" }}
-                              >
-                                <div className="price-box-title">
-                                  New Total Fare
-                                </div>
-                                <div className="price-box-price">
-                                  {APICurrencyType} <br />{" "}
-                                  {(
-                                    data.NewTotalPrice +
-                                    data.SupplierTotalServiceCharge +
-                                    data.TotalServiceCharge
-                                  ).toFixed(2)}
-                                </div>
-                              </div>
-                              <div
-                                className="payable-amount price-box"
-                                style={{ background: "#fbe1b8" }}
-                              >
-                                <div className="price-box-title">
-                                  Payable Amount
-                                </div>
-                                <div className="price-box-price">
-                                  {APICurrencyType} <br />{" "}
-                                  {data.TotalPrice.toFixed(2)}
-                                </div>
-                              </div>
-
-                              <div className="price-book price-box">
-                                {/* <div className="price">{APICurrencyType} <br /> {data.TotalPrice}</div> */}
-                                <div className="booking">
-                                  <button
-                                    className="booking-btn"
-                                    onClick={() =>
-                                      showFlightDetail(flightDetailPopup, data)
-                                    }
-                                  >
-                                    Select
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="col-lg-12">
-                            <div
-                              className="bag-details"
-                              style={{ marginTop: "10px" }}
-                            >
-                              <div className="baggage-info-list">
-                                <div>
-                                  Baggage:
-                                  <span
-                                    data-toggle="popover"
-                                    data-trigger="mouseenter mouseleave"
-                                  >
-                                    <svg
-                                      className="mb-1"
-                                      width="18"
-                                      height="18"
-                                      viewBox="0 0 22 22"
-                                      fill="none"
-                                      xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                      <path
-                                        d="M15.3443 5.27199C16.2934 5.27199 17.0755 6.04532 17.0755 7.02956V16.6962C17.0755 17.6893 16.2934 18.4538 15.3443 18.4538C15.3443 18.9635 14.9312 19.3326 14.4391 19.3326C13.9997 19.3326 13.5603 18.9635 13.5603 18.4538H8.28761C8.28761 18.9635 7.84822 19.3326 7.40882 19.3326C6.9167 19.3326 6.50367 18.9635 6.50367 18.4538C5.55458 18.4538 4.77246 17.6893 4.77246 16.6962V7.02956C4.77246 6.04532 5.55458 5.27199 6.50367 5.27199H8.28761V2.63562C8.28761 2.12593 8.69185 1.75684 9.1664 1.75684H12.6816C13.1561 1.75684 13.5603 2.12593 13.5603 2.63562V5.27199H15.3443ZM12.2422 5.27199V3.07502H9.60579V5.27199H12.2422ZM7.40882 7.90835V15.8174H8.72701V7.90835H7.40882ZM13.1209 7.90835V15.8174H14.4391V7.90835H13.1209ZM10.2649 7.90835V15.8174H11.5831V7.90835H10.2649Z"
-                                        fill="#98A2B3"
-                                      ></path>
-                                    </svg>
-                                  </span>
-                                  <div id="baggageTemplate">
-                                    {data.Onwards.map(
-                                      (baggage, baggageIndex) => (
-                                        <div key={baggageIndex}>
-                                          <strong>{`${baggage.Origin}-${
-                                            baggage.Destination
-                                          }: ${
-                                            baggage.AirBaggageAllowance || "N/A"
-                                          }`}</strong>
+                                          )}
                                         </div>
-                                      )
-                                    )}
-                                    {reissueResponse?.AirSearchReq
-                                      .JourneyType === 2 && (
-                                      <>
-                                        <hr />
-                                        {data.Returns.map(
-                                          (baggage, seatIndex) => (
-                                            <div key={seatIndex}>
-                                              <strong>{`${baggage.Origin}-${
-                                                baggage.Destination
-                                              }: ${
-                                                baggage.AirBaggageAllowance ||
-                                                "N/A"
-                                              }`}</strong>
-                                            </div>
-                                          )
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                                <div>
-                                  {" "}
-                                  | Class:{" "}
-                                  <strong>
-                                    {reissueResponse?.AirSearchReq.ClassType}
-                                  </strong>
-                                </div>
-                                <div>
-                                  {" "}
-                                  | Seats:
-                                  <span
-                                    data-toggle="popover"
-                                    data-trigger="mouseenter mouseleave"
-                                  >
-                                    <img
-                                      style={{ width: "16px" }}
-                                      src="assets/images/seat.png"
-                                      alt=""
-                                    />
-                                  </span>
-                                  <div id="seatTemplate">
-                                    {data.Onwards.map((seat, seatIndex) => (
-                                      <div key={seatIndex}>
-                                        <strong>{`${seat.Origin}-${
-                                          seat.Destination
-                                        }: ${
-                                          seat.BookingCount || "N/A"
-                                        }`}</strong>
-                                      </div>
-                                    ))}
-                                    {reissueResponse?.AirSearchReq
-                                      .JourneyType === 2 && (
-                                      <>
-                                        <hr />
-                                        {data.Returns.map((seat, seatIndex) => (
-                                          <div key={seatIndex}>
-                                            <strong>{`${seat.Origin}-${
-                                              seat.Destination
-                                            }: ${
-                                              seat.BookingCount || "N/A"
-                                            }`}</strong>
-                                          </div>
-                                        ))}
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="details-view-btm">
-                                <a
-                                  href="javascript:void(0)"
-                                  className="details-btn"
-                                  id="toggleDetails"
-                                  onClick={() => toggleDetailsView(i)}
-                                >
-                                  View Details
-                                </a>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`flight-details detailsView${i}`}
-                        style={{ display: showDetails ? "block" : "none" }}
-                      >
-                        <div className="flight-details-header">
-                          <div className="titles">Flight Details</div>
-                        </div>
-
-                        <div className="flight-details-body">
-                          <ul
-                            className="nav nav-pills mb-3"
-                            id="pills-tab"
-                            role="tablist"
-                          >
-                            <li className="nav-item" role="presentation">
-                              <button
-                                className="nav-link active"
-                                id="flightDep-tab"
-                                data-bs-toggle="pill"
-                                data-bs-target="#flightDep"
-                                type="button"
-                                role="tab"
-                                aria-controls="flightDep"
-                                aria-selected="true"
-                              >
-                                <div className="srcdest">
-                                  <div className="srcdest-left">
-                                    {data.Onwards[0].Origin} -{" "}
-                                    {
-                                      data.Onwards[data.Onwards.length - 1]
-                                        .Destination
-                                    }
-                                  </div>
-                                  <div className="srcdest-right">
-                                    {
-                                      data.TotalTravelTimes[0]
-                                        .TotalTravelDuration
-                                    }
-                                  </div>
-                                </div>
-                              </button>
-                            </li>
-
-                            {data.Returns.length > 0 && (
-                              <li className="nav-item" role="presentation">
-                                <button
-                                  className="nav-link"
-                                  id="flightDep2-tab"
-                                  data-bs-toggle="pill"
-                                  data-bs-target="#flightDep2"
-                                  type="button"
-                                  role="tab"
-                                  aria-controls="flightDep2"
-                                  aria-selected="false"
-                                >
-                                  <div className="srcdest">
-                                    <div className="srcdest-left">
-                                      {data.Returns[0].Origin} -{" "}
-                                      {
-                                        data.Returns[data.Returns.length - 1]
-                                          .Destination
-                                      }
-                                    </div>
-                                    <div className="srcdest-right">
-                                      {
-                                        data.TotalTravelTimes[1]
-                                          .TotalTravelDuration
-                                      }
-                                    </div>
-                                  </div>
-                                </button>
-                              </li>
-                            )}
-                          </ul>
-                          <div className="tab-content" id="pills-tabContent">
-                            <div
-                              className="tab-pane fade show active"
-                              id="flightDep"
-                              role="tabpanel"
-                              aria-labelledby="flightDep-tab"
-                              tabIndex="0"
-                            >
-                              {data.Onwards.map((item, index) => (
-                                <div className="departure-flight" key={index}>
-                                  <div className="seg-operating-airline">
-                                    Operated by{" "}
-                                    <b>{item.OperatingCarrierName}</b> -{" "}
-                                    {item.Equipment}
-                                  </div>
-                                  <div className="timing-main d-flex align-items-center">
-                                    <div className="timing-left d-flex flex-column align-items-center">
-                                      <div className="duration-container">
-                                        {item.TravelDuration}
+                                        <div className="flight-month">
+                                          {data.Onwards[0].DepartureTime.toLocaleString(
+                                            "en-US",
+                                            {
+                                              month: "short",
+                                              day: "numeric",
+                                              weekday: "short",
+                                            }
+                                          )}
+                                        </div>
+                                        <div className="airport-name">
+                                          {`${data.Onwards[0].OriginAirPortName}, ${data.Onwards[0].OriginAirPortName}`}
+                                        </div>
                                       </div>
                                     </div>
-                                    <div className="timing-right d-flex flex-column">
-                                      <div className="d-flex flex-column timeline-elt">
-                                        <i className="far fa-dot-circle timeline-icon"></i>
-                                        <div className="joining-line"></div>
-                                        <div className="flight-detail">
+                                    <div className="col-4 col-lg-3">
+                                      <div className="time-stop">
+                                        <div className="total-time">
+                                          {
+                                            data.TotalTravelTimes[0]
+                                              ?.TotalTravelDuration
+                                          }
+                                        </div>
+                                        <div className="quick-view">
+                                          {[
+                                            ...Array(
+                                              data.TotalTravelTimes[0].NoOfStop
+                                            ),
+                                          ].map((_, stopIndex) => (
+                                            <span
+                                              key={stopIndex}
+                                              data-toggle="popover"
+                                              data-trigger="hover"
+                                            >
+                                              <strong>
+                                                {`${data.Onwards[stopIndex].OriginAirPortName} - ${data.Onwards[stopIndex].DestinationAirPortName}`}
+                                              </strong>
+                                              <p>
+                                                Travel Time:{" "}
+                                                {
+                                                  data.Onwards[stopIndex]
+                                                    .TravelDuration
+                                                }
+                                              </p>
+                                              <p>
+                                                Layover Time:{" "}
+                                                {
+                                                  data.Onwards[stopIndex]
+                                                    .LayoverTime
+                                                }
+                                              </p>
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <div className="total-stop">
+                                          {`${
+                                            data.TotalTravelTimes[0]?.NoOfStop
+                                          } ${
+                                            data.TotalTravelTimes[0]?.NoOfStop >
+                                            1
+                                              ? "Stops"
+                                              : "Stop"
+                                          }`}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="col-4 col-lg-3">
+                                      <div className="flight-infos arrive">
+                                        <div className="flight-time">
+                                          {data.Onwards[
+                                            data.Onwards.length - 1
+                                          ].ArrivalTime.toLocaleString(
+                                            "en-US",
+                                            {
+                                              hour: "numeric",
+                                              minute: "numeric",
+                                              hour12: true,
+                                            }
+                                          )}
+                                        </div>
+                                        <div className="flight-month">
+                                          {data.Onwards[
+                                            data.Onwards.length - 1
+                                          ].ArrivalTime.toLocaleString(
+                                            "en-US",
+                                            {
+                                              month: "short",
+                                              day: "numeric",
+                                              weekday: "short",
+                                            }
+                                          )}
+                                        </div>
+                                        <div className="airport-name">
+                                          {`${
+                                            data.Onwards[
+                                              data.Onwards.length - 1
+                                            ].DestinationAirPortName
+                                          }, ${
+                                            data.Onwards[
+                                              data.Onwards.length - 1
+                                            ].DestinationAirPortName
+                                          }`}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {reissueResponse.AirSearchReq.JourneyType ===
+                                    2 && (
+                                    <div className="row">
+                                      <hr />
+                                      <div className="col-lg-3">
+                                        <div className="airbus">
                                           <img
-                                            src={`${imgUrl}${item.OperatingCarrier}.gif`}
+                                            src={`${imgUrl}${data.PlatingCarrier}.gif`}
                                             alt=""
                                           />
                                           <div className="airbus-info">
-                                            <div className="flight-no">
-                                              {item.OperatingCarrier} -{" "}
-                                              {item.OperatingFlightNumber}
+                                            <div className="name">
+                                              {data.PlatingCarrierName}
                                             </div>
+                                            <div className="name">
+                                              <strong>
+                                                {`${data.Returns[0].Origin} - ${
+                                                  data.Returns[
+                                                    data.Returns.length - 1
+                                                  ].Destination
+                                                }`}
+                                              </strong>
+                                            </div>
+                                            {data.TotalTravelTimes[1]
+                                              ?.TotalLayoverTime && (
+                                              <div className="flight-no">
+                                                {/* {millisecondsToDayHourMin(
+                                            data.TotalTravelTimes[1]
+                                              ?.TotalLayoverTime
+                                          )} */}
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
-                                        <div className="location-time-info">
-                                          <span className="seg-details-dep-time">
-                                            {item.DepartureTime}
-                                          </span>
-                                          <span className="seg-details-dep-city">
-                                            {item.OriginAirPortName} (
-                                            {item.Origin})
-                                          </span>
-                                          <span className="seg-details-dep-date">
-                                            {item.DepartureTime}
-                                          </span>
-                                        </div>
-                                        <div className="seg-details-dep-airport">
-                                          {item.OriginAirPortName}
-                                        </div>
-                                        {item.OriginTerminal && (
-                                          <div className="seg-details-terminal">
-                                            Terminal {item.OriginTerminal}
+                                      </div>
+                                      <div className="col-4 col-lg-3">
+                                        <div className="flight-infos depart">
+                                          <div className="flight-time">
+                                            {data.Returns[0].DepartureTime.toLocaleString(
+                                              "en-US",
+                                              {
+                                                hour: "numeric",
+                                                minute: "numeric",
+                                                hour12: true,
+                                              }
+                                            )}
                                           </div>
+                                          <div className="flight-month">
+                                            {data.Returns[0].DepartureTime.toLocaleString(
+                                              "en-US",
+                                              {
+                                                month: "short",
+                                                day: "numeric",
+                                                weekday: "short",
+                                              }
+                                            )}
+                                          </div>
+                                          <div className="airport-name">
+                                            {`${data.Returns[0].OriginAirPortName}, ${data.Returns[0].OriginAirPortName}`}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="col-4 col-lg-3">
+                                        <div className="time-stop">
+                                          <div className="total-time">
+                                            {
+                                              data.TotalTravelTimes[1]
+                                                ?.TotalTravelDuration
+                                            }
+                                          </div>
+                                          <div className="quick-view">
+                                            {[
+                                              ...Array(
+                                                data.TotalTravelTimes[1]
+                                                  .NoOfStop
+                                              ),
+                                            ].map((_, stopIndex) => (
+                                              <span
+                                                key={stopIndex}
+                                                data-toggle="popover"
+                                                data-trigger="hover"
+                                              >
+                                                <strong>
+                                                  {`${data.Returns[stopIndex].OriginAirPortName} - ${data.Returns[stopIndex].DestinationAirPortName}`}
+                                                </strong>
+                                                <p>
+                                                  Travel Time:{" "}
+                                                  {
+                                                    data.Returns[stopIndex]
+                                                      .TravelDuration
+                                                  }
+                                                </p>
+                                                <p>
+                                                  Layover Time:{" "}
+                                                  {
+                                                    data.Returns[stopIndex]
+                                                      .LayoverTime
+                                                  }
+                                                </p>
+                                              </span>
+                                            ))}
+                                          </div>
+                                          <div className="total-stop">
+                                            {`${
+                                              data.TotalTravelTimes[1]?.NoOfStop
+                                            } ${
+                                              data.TotalTravelTimes[1]
+                                                ?.NoOfStop > 1
+                                                ? "Stops"
+                                                : "Stop"
+                                            }`}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="col-4 col-lg-3">
+                                        <div className="flight-infos arrive">
+                                          <div className="flight-time">
+                                            {data.Returns[
+                                              data.Returns.length - 1
+                                            ].ArrivalTime.toLocaleString(
+                                              "en-US",
+                                              {
+                                                hour: "numeric",
+                                                minute: "numeric",
+                                                hour12: true,
+                                              }
+                                            )}
+                                          </div>
+                                          <div className="flight-month">
+                                            {data.Returns[
+                                              data.Returns.length - 1
+                                            ].ArrivalTime.toLocaleString(
+                                              "en-US",
+                                              {
+                                                month: "short",
+                                                day: "numeric",
+                                                weekday: "short",
+                                              }
+                                            )}
+                                          </div>
+                                          <div className="airport-name">
+                                            {`${
+                                              data.Returns[
+                                                data.Returns.length - 1
+                                              ].DestinationAirPortName
+                                            }, ${
+                                              data.Returns[
+                                                data.Returns.length - 1
+                                              ].DestinationAirPortName
+                                            }`}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="col-lg-6">
+                                  <div className="price-box-main">
+                                    <div
+                                      className="old-total-price price-box"
+                                      style={{ background: "#fef5e7" }}
+                                    >
+                                      <div className="price-box-title">
+                                        Previous Total Fare
+                                      </div>
+                                      <div className="price-box-price">
+                                        {APICurrencyType} <br />{" "}
+                                        {reissueResponse?.BookingResponseJson.AirPriceCheckResponse.TotalPrice.toFixed(
+                                          2
                                         )}
                                       </div>
+                                    </div>
+                                    <div
+                                      className="new-total-price price-box"
+                                      style={{ background: "#fdebd0" }}
+                                    >
+                                      <div className="price-box-title">
+                                        New Total Fare
+                                      </div>
+                                      <div className="price-box-price">
+                                        {APICurrencyType} <br />{" "}
+                                        {(
+                                          data.NewTotalPrice +
+                                          data.SupplierTotalServiceCharge +
+                                          data.TotalServiceCharge
+                                        ).toFixed(2)}
+                                      </div>
+                                    </div>
+                                    <div
+                                      className="payable-amount price-box"
+                                      style={{ background: "#fbe1b8" }}
+                                    >
+                                      <div className="price-box-title">
+                                        Payable Amount
+                                      </div>
+                                      <div className="price-box-price">
+                                        {APICurrencyType} <br />{" "}
+                                        {data.TotalPrice.toFixed(2)}
+                                      </div>
+                                    </div>
 
-                                      <div className="baggage-info">
-                                        <div>
-                                          Baggage:{" "}
+                                    <div className="price-book price-box">
+                                      {/* <div className="price">{APICurrencyType} <br /> {data.TotalPrice}</div> */}
+                                      <div className="booking">
+                                        <button
+                                          className="booking-btn"
+                                          // onClick={() =>
+                                          //   showFlightDetail(flightDetailPopup, data)
+                                          // }
+                                        >
+                                          Select
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="col-lg-12">
+                                  <div
+                                    className="bag-details"
+                                    style={{ marginTop: "10px" }}
+                                  >
+                                    <div className="baggage-info-list">
+                                      <div>
+                                        Baggage:
+                                        <span
+                                          data-toggle="popover"
+                                          data-trigger="mouseenter mouseleave"
+                                        >
                                           <svg
                                             className="mb-1"
                                             width="18"
@@ -2446,97 +2821,367 @@ const FlightList = ({
                                               fill="#98A2B3"
                                             ></path>
                                           </svg>
-                                          <strong>
-                                            {item.AirBaggageAllowance || "N/A"}
-                                          </strong>
-                                        </div>
-                                        <div>
-                                          {" "}
-                                          | Class:{" "}
-                                          <strong>
-                                            {
-                                              reissueResponse?.AirSearchReq
-                                                .ClassType
-                                            }{" "}
-                                            ({item.BookingCode})
-                                          </strong>
-                                        </div>
-                                        <div>
-                                          {" "}
-                                          | Fare Basis:{" "}
-                                          <strong>
-                                            {item.FareBasis || "N/A"}
-                                          </strong>
-                                        </div>
-                                        <div>
-                                          {" "}
-                                          | Seats:{" "}
-                                          <strong>
-                                            {item.BookingCount || "N/A"}
-                                          </strong>
+                                        </span>
+                                        <div id="baggageTemplate">
+                                          {data.Onwards.map(
+                                            (baggage, baggageIndex) => (
+                                              <div key={baggageIndex}>
+                                                <strong>{`${baggage.Origin}-${
+                                                  baggage.Destination
+                                                }: ${
+                                                  baggage.AirBaggageAllowance ||
+                                                  "N/A"
+                                                }`}</strong>
+                                              </div>
+                                            )
+                                          )}
+                                          {reissueResponse?.AirSearchReq
+                                            .JourneyType === 2 && (
+                                            <>
+                                              <hr />
+                                              {data.Returns.map(
+                                                (baggage, seatIndex) => (
+                                                  <div key={seatIndex}>
+                                                    <strong>{`${
+                                                      baggage.Origin
+                                                    }-${baggage.Destination}: ${
+                                                      baggage.AirBaggageAllowance ||
+                                                      "N/A"
+                                                    }`}</strong>
+                                                  </div>
+                                                )
+                                              )}
+                                            </>
+                                          )}
                                         </div>
                                       </div>
-
-                                      <div className="d-flex flex-column timeline-elt">
-                                        <i className="far fa-dot-circle timeline-icon"></i>
-                                        <div className="flight-detail">
+                                      <div>
+                                        {" "}
+                                        | Class:{" "}
+                                        <strong>
+                                          {
+                                            reissueResponse?.AirSearchReq
+                                              .ClassType
+                                          }
+                                        </strong>
+                                      </div>
+                                      <div>
+                                        {" "}
+                                        | Seats:
+                                        <span
+                                          data-toggle="popover"
+                                          data-trigger="mouseenter mouseleave"
+                                        >
                                           <img
-                                            src={`${imgUrl}${item.OperatingCarrier}.gif`}
+                                            style={{ width: "16px" }}
+                                            src="assets/images/seat.png"
                                             alt=""
                                           />
-                                          <div className="airbus-info">
-                                            <div className="flight-no">
-                                              {item.OperatingCarrier} -{" "}
-                                              {item.OperatingFlightNumber}
+                                        </span>
+                                        <div id="seatTemplate">
+                                          {data.Onwards.map(
+                                            (seat, seatIndex) => (
+                                              <div key={seatIndex}>
+                                                <strong>{`${seat.Origin}-${
+                                                  seat.Destination
+                                                }: ${
+                                                  seat.BookingCount || "N/A"
+                                                }`}</strong>
+                                              </div>
+                                            )
+                                          )}
+                                          {reissueResponse?.AirSearchReq
+                                            .JourneyType === 2 && (
+                                            <>
+                                              <hr />
+                                              {data.Returns.map(
+                                                (seat, seatIndex) => (
+                                                  <div key={seatIndex}>
+                                                    <strong>{`${seat.Origin}-${
+                                                      seat.Destination
+                                                    }: ${
+                                                      seat.BookingCount || "N/A"
+                                                    }`}</strong>
+                                                  </div>
+                                                )
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="details-view-btm">
+                                      <a
+                                        href="javascript:void(0)"
+                                        className="details-btn"
+                                        id="toggleDetails"
+                                        onClick={() => toggleDetailsView(i)}
+                                      >
+                                        View Details
+                                      </a>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div
+                              className={`flight-details detailsView${i}`}
+                              // style={{ display: showDetails ? "block" : "none" }}
+                            >
+                              <div className="flight-details-header">
+                                <div className="titles">Flight Details</div>
+                              </div>
+
+                              <div className="flight-details-body">
+                                <ul
+                                  className="nav nav-pills mb-3"
+                                  id="pills-tab"
+                                  role="tablist"
+                                >
+                                  <li className="nav-item" role="presentation">
+                                    <button
+                                      className="nav-link active"
+                                      id="flightDep-tab"
+                                      data-bs-toggle="pill"
+                                      data-bs-target="#flightDep"
+                                      type="button"
+                                      role="tab"
+                                      aria-controls="flightDep"
+                                      aria-selected="true"
+                                    >
+                                      <div className="srcdest">
+                                        <div className="srcdest-left">
+                                          {data.Onwards[0].Origin} -{" "}
+                                          {
+                                            data.Onwards[
+                                              data.Onwards.length - 1
+                                            ].Destination
+                                          }
+                                        </div>
+                                        <div className="srcdest-right">
+                                          {
+                                            data.TotalTravelTimes[0]
+                                              .TotalTravelDuration
+                                          }
+                                        </div>
+                                      </div>
+                                    </button>
+                                  </li>
+
+                                  {data.Returns.length > 0 && (
+                                    <li
+                                      className="nav-item"
+                                      role="presentation"
+                                    >
+                                      <button
+                                        className="nav-link"
+                                        id="flightDep2-tab"
+                                        data-bs-toggle="pill"
+                                        data-bs-target="#flightDep2"
+                                        type="button"
+                                        role="tab"
+                                        aria-controls="flightDep2"
+                                        aria-selected="false"
+                                      >
+                                        <div className="srcdest">
+                                          <div className="srcdest-left">
+                                            {data.Returns[0].Origin} -{" "}
+                                            {
+                                              data.Returns[
+                                                data.Returns.length - 1
+                                              ].Destination
+                                            }
+                                          </div>
+                                          <div className="srcdest-right">
+                                            {
+                                              data.TotalTravelTimes[1]
+                                                .TotalTravelDuration
+                                            }
+                                          </div>
+                                        </div>
+                                      </button>
+                                    </li>
+                                  )}
+                                </ul>
+                                <div
+                                  className="tab-content"
+                                  id="pills-tabContent"
+                                >
+                                  <div
+                                    className="tab-pane fade show active"
+                                    id="flightDep"
+                                    role="tabpanel"
+                                    aria-labelledby="flightDep-tab"
+                                    tabIndex="0"
+                                  >
+                                    {data.Onwards.map((item, index) => (
+                                      <div
+                                        className="departure-flight"
+                                        key={index}
+                                      >
+                                        <div className="seg-operating-airline">
+                                          Operated by{" "}
+                                          <b>{item.OperatingCarrierName}</b> -{" "}
+                                          {item.Equipment}
+                                        </div>
+                                        <div className="timing-main d-flex align-items-center">
+                                          <div className="timing-left d-flex flex-column align-items-center">
+                                            <div className="duration-container">
+                                              {item.TravelDuration}
+                                            </div>
+                                          </div>
+                                          <div className="timing-right d-flex flex-column">
+                                            <div className="d-flex flex-column timeline-elt">
+                                              <i className="far fa-dot-circle timeline-icon"></i>
+                                              <div className="joining-line"></div>
+                                              <div className="flight-detail">
+                                                <img
+                                                  src={`${imgUrl}${item.OperatingCarrier}.gif`}
+                                                  alt=""
+                                                />
+                                                <div className="airbus-info">
+                                                  <div className="flight-no">
+                                                    {item.OperatingCarrier} -{" "}
+                                                    {item.OperatingFlightNumber}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="location-time-info">
+                                                <span className="seg-details-dep-time">
+                                                  {item.DepartureTime}
+                                                </span>
+                                                <span className="seg-details-dep-city">
+                                                  {item.OriginAirPortName} (
+                                                  {item.Origin})
+                                                </span>
+                                                <span className="seg-details-dep-date">
+                                                  {item.DepartureTime}
+                                                </span>
+                                              </div>
+                                              <div className="seg-details-dep-airport">
+                                                {item.OriginAirPortName}
+                                              </div>
+                                              {item.OriginTerminal && (
+                                                <div className="seg-details-terminal">
+                                                  Terminal {item.OriginTerminal}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            <div className="baggage-info">
+                                              <div>
+                                                Baggage:{" "}
+                                                <svg
+                                                  className="mb-1"
+                                                  width="18"
+                                                  height="18"
+                                                  viewBox="0 0 22 22"
+                                                  fill="none"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                  <path
+                                                    d="M15.3443 5.27199C16.2934 5.27199 17.0755 6.04532 17.0755 7.02956V16.6962C17.0755 17.6893 16.2934 18.4538 15.3443 18.4538C15.3443 18.9635 14.9312 19.3326 14.4391 19.3326C13.9997 19.3326 13.5603 18.9635 13.5603 18.4538H8.28761C8.28761 18.9635 7.84822 19.3326 7.40882 19.3326C6.9167 19.3326 6.50367 18.9635 6.50367 18.4538C5.55458 18.4538 4.77246 17.6893 4.77246 16.6962V7.02956C4.77246 6.04532 5.55458 5.27199 6.50367 5.27199H8.28761V2.63562C8.28761 2.12593 8.69185 1.75684 9.1664 1.75684H12.6816C13.1561 1.75684 13.5603 2.12593 13.5603 2.63562V5.27199H15.3443ZM12.2422 5.27199V3.07502H9.60579V5.27199H12.2422ZM7.40882 7.90835V15.8174H8.72701V7.90835H7.40882ZM13.1209 7.90835V15.8174H14.4391V7.90835H13.1209ZM10.2649 7.90835V15.8174H11.5831V7.90835H10.2649Z"
+                                                    fill="#98A2B3"
+                                                  ></path>
+                                                </svg>
+                                                <strong>
+                                                  {item.AirBaggageAllowance ||
+                                                    "N/A"}
+                                                </strong>
+                                              </div>
+                                              <div>
+                                                {" "}
+                                                | Class:{" "}
+                                                <strong>
+                                                  {
+                                                    reissueResponse
+                                                      ?.AirSearchReq.ClassType
+                                                  }{" "}
+                                                  ({item.BookingCode})
+                                                </strong>
+                                              </div>
+                                              <div>
+                                                {" "}
+                                                | Fare Basis:{" "}
+                                                <strong>
+                                                  {item.FareBasis || "N/A"}
+                                                </strong>
+                                              </div>
+                                              <div>
+                                                {" "}
+                                                | Seats:{" "}
+                                                <strong>
+                                                  {item.BookingCount || "N/A"}
+                                                </strong>
+                                              </div>
+                                            </div>
+
+                                            <div className="d-flex flex-column timeline-elt">
+                                              <i className="far fa-dot-circle timeline-icon"></i>
+                                              <div className="flight-detail">
+                                                <img
+                                                  src={`${imgUrl}${item.OperatingCarrier}.gif`}
+                                                  alt=""
+                                                />
+                                                <div className="airbus-info">
+                                                  <div className="flight-no">
+                                                    {item.OperatingCarrier} -{" "}
+                                                    {item.OperatingFlightNumber}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="location-time-info">
+                                                <span className="seg-details-dep-time">
+                                                  {item.ArrivalTime}
+                                                </span>
+                                                <span className="seg-details-dep-city">
+                                                  {item.DestinationAirPortName}{" "}
+                                                  ({item.Destination})
+                                                </span>
+                                                <span className="seg-details-dep-date">
+                                                  {item.ArrivalTime}
+                                                </span>
+                                              </div>
+                                              <div className="seg-details-dep-airport">
+                                                {item.DestinationAirPortName}
+                                              </div>
+                                              {item.DestinationTerminal && (
+                                                <div className="seg-details-terminal">
+                                                  Terminal{" "}
+                                                  {item.DestinationTerminal}
+                                                </div>
+                                              )}
                                             </div>
                                           </div>
                                         </div>
-                                        <div className="location-time-info">
-                                          <span className="seg-details-dep-time">
-                                            {item.ArrivalTime}
-                                          </span>
-                                          <span className="seg-details-dep-city">
-                                            {item.DestinationAirPortName} (
-                                            {item.Destination})
-                                          </span>
-                                          <span className="seg-details-dep-date">
-                                            {item.ArrivalTime}
-                                          </span>
-                                        </div>
-                                        <div className="seg-details-dep-airport">
-                                          {item.DestinationAirPortName}
-                                        </div>
-                                        {item.DestinationTerminal && (
-                                          <div className="seg-details-terminal">
-                                            Terminal {item.DestinationTerminal}
+
+                                        {item.LayoverTime && (
+                                          <div className="layover-section">
+                                            <div className="layover-icon">
+                                              <i className="far fa-clock"></i>
+                                            </div>
+                                            <div className="layover-desc">
+                                              <div className="layover-duration">
+                                                {item.LayoverTime} transit in
+                                              </div>
+                                              <div className="layover-place">
+                                                {item.DestinationAirPortName}
+                                              </div>
+                                            </div>
                                           </div>
                                         )}
                                       </div>
-                                    </div>
+                                    ))}
                                   </div>
-
-                                  {item.LayoverTime && (
-                                    <div className="layover-section">
-                                      <div className="layover-icon">
-                                        <i className="far fa-clock"></i>
-                                      </div>
-                                      <div className="layover-desc">
-                                        <div className="layover-duration">
-                                          {item.LayoverTime} transit in
-                                        </div>
-                                        <div className="layover-place">
-                                          {item.DestinationAirPortName}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
-                              ))}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    </div>
+                        </>
+                      );
+                    })}
 
                     {showSkeletonLoading && (
                       <div>
@@ -2598,7 +3243,7 @@ const FlightList = ({
                       </div>
                       <div className="error-content">
                         <h3>
-                          Unfortunately, we couldn't find any flights for you!
+                          Unfortunately, we could not find any flights for you!
                         </h3>
                         <p>
                           No flights match your filters. Please adjust your
@@ -2620,4 +3265,4 @@ const FlightList = ({
   );
 };
 
-export default FlightList;
+export default FlightListComponent;
